@@ -1,153 +1,151 @@
 # AGENTS.md
-Guidance for coding agents working in this repository.
+Practical guidance for coding agents working in this repository.
 
-## 1) Project overview
+## 1) Purpose and scope
+- This file defines build, test, and style expectations for agentic edits.
+- Follow existing project patterns first; prefer minimal, targeted changes.
+- Apply these rules to all Java, resource, and test files under this repo.
+
+## 2) Project snapshot
 - Stack: Java 8, Spring Boot 2.3.12, MyBatis-Plus 3.4.3, Redis, MySQL.
 - Build tool: Maven (`pom.xml` at repository root).
 - App entry point: `src/main/java/com/hmdp/HmDianPingApplication.java`.
-- Package root: `com.hmdp`.
-- API response wrapper: `com.hmdp.dto.Result`.
-- Global exception advice: `com.hmdp.config.WebExceptionAdvice`.
+- Root package: `com.hmdp`.
+- Standard API wrapper: `com.hmdp.dto.Result`.
+- Global runtime exception handler: `com.hmdp.config.WebExceptionAdvice`.
 
-## 2) Local prerequisites
-- JDK 8 (`java -version` should show 1.8.x).
-- Maven 3.6+ available as `mvn` (no Maven wrapper in repo).
-- MySQL reachable per `src/main/resources/application.yaml`.
-- Redis reachable per `src/main/resources/application.yaml`.
-- Default HTTP port is `8081`.
+## 3) Repository layout
+- `src/main/java/com/hmdp/controller`: REST controllers and request mapping.
+- `src/main/java/com/hmdp/service`: service interfaces (prefixed with `I`).
+- `src/main/java/com/hmdp/service/impl`: service implementations.
+- `src/main/java/com/hmdp/mapper`: MyBatis-Plus mapper interfaces.
+- `src/main/java/com/hmdp/entity`: persistence entities.
+- `src/main/java/com/hmdp/dto`: API-facing DTOs and view models.
+- `src/main/java/com/hmdp/config`: config and cross-cutting concerns.
+- `src/main/java/com/hmdp/utils`: utility classes and constants.
+- `src/test/java/com/hmdp`: tests (currently minimal suite).
 
-## 3) Build / run / test commands
-Run commands from repository root.
+## 4) Local prerequisites
+- JDK 8 required (`java -version` should report 1.8.x).
+- Maven 3.6+ required as `mvn` (no Maven wrapper is present).
+- MySQL and Redis should match settings in `src/main/resources/application.yaml`.
+- Default service port is `8081` unless overridden.
+
+## 5) Build, lint, and test commands
+Run from repository root.
 
 ```bash
-# compile only
+# compile only (fast baseline check)
 mvn clean compile
 
 # run all tests
 mvn test
 
-# run one test class (fastest normal iteration)
+# run one test class (preferred fast iteration)
 mvn -Dtest=HmDianPingApplicationTests test
 
 # run one test method
 mvn -Dtest=HmDianPingApplicationTests#methodName test
 
-# package jar (runs tests)
+# run one test using fully qualified name (safe fallback)
+mvn -Dtest=com.hmdp.HmDianPingApplicationTests test
+
+# package jar (includes tests)
 mvn clean package
 
 # package jar without tests
 mvn clean package -DskipTests
 
-# run app
+# start application locally
 mvn spring-boot:run
 ```
 
-Notes:
-- If needed, use fully qualified test name: `-Dtest=com.hmdp.HmDianPingApplicationTests`.
-- Current test suite is minimal (`src/test/java/com/hmdp/HmDianPingApplicationTests.java`).
-- Integration behavior can depend on MySQL/Redis availability.
+## 6) Lint and quality gates
+- No dedicated lint plugin is configured (no Checkstyle/PMD/Spotless in `pom.xml`).
+- Treat successful compile and tests as the quality gate for agent changes.
+- Preferred pre-handoff sequence:
+  1) `mvn clean compile`
+  2) `mvn -Dtest=<TouchedTestClass> test` when applicable
+  3) `mvn test` before final handoff when feasible
+- If external services are unavailable, report which command was blocked and why.
 
-## 4) Lint and quality gates
-- No explicit lint plugin is configured in `pom.xml` (no Checkstyle/Spotless/PMD).
-- Use compile/tests/package as quality gates:
+## 7) Coding style rules
 
-```bash
-mvn clean compile
-mvn test
-mvn clean package
-```
-
-- Treat successful compile + tests as the baseline "lint" signal.
-- Keep formatting aligned with nearby files; do not introduce new formatters unless asked.
-
-## 5) Repository structure conventions
-- `controller/`: REST endpoints and request mapping.
-- `service/`: service interfaces, conventionally prefixed with `I`.
-- `service/impl/`: concrete services (`*ServiceImpl`).
-- `mapper/`: MyBatis-Plus mapper interfaces (`*Mapper`).
-- `entity/`: persistence/domain entities.
-- `dto/`: API DTOs (`Result`, login payloads, view objects).
-- `config/`: Spring configuration and cross-cutting concerns.
-- `utils/`: stateless utility classes and shared constants.
-
-## 6) Code style guidelines
-
-### 6.1 Imports
-- Prefer explicit imports.
-- Avoid wildcard imports unless the file already uses them and consistency matters.
-- Group imports in this order:
+### 7.1 Imports
+- Prefer explicit imports over wildcard imports.
+- Keep imports organized in stable groups:
   1) project (`com.hmdp...`)
-  2) third-party (`org...`, `com.baomidou...`, etc.)
-  3) JDK/`javax`
-- Keep groups stable and sorted.
+  2) third-party (`org...`, `com.baomidou...`, `cn.hutool...`)
+  3) JDK and `javax`
+- Keep imports sorted inside each group.
 
-### 6.2 Formatting
-- 4 spaces for indentation.
-- Opening braces on the same line as declarations.
-- Keep methods focused and reasonably small.
-- Preserve existing annotation style (`@RestController`, `@Service`, etc.).
+### 7.2 Formatting
+- Use 4-space indentation.
+- Keep opening braces on the same line.
 - Avoid unrelated reformatting in touched files.
+- Preserve existing annotation and Lombok usage style.
+- Keep methods focused and avoid unnecessary complexity.
 
-### 6.3 Types and API boundaries
-- Use concrete domain types (`User`, `Shop`, etc.) in mapper/service layers.
+### 7.3 Types and API boundaries
+- Use `Long` for ids to stay consistent with entities/controllers.
 - Use DTOs at API boundaries (`LoginFormDTO`, `UserDTO`, `Result`).
-- Controllers should return `Result` consistently.
-- Use `Long` for IDs (matches existing entities/controllers).
-- Avoid raw types; use generics (`List<?>`, `BaseMapper<Shop>`, etc.).
+- Keep domain entities in service/mapper layers.
+- Avoid raw types; always use generics.
+- Favor clear, concrete return types over `Object`.
 
-### 6.4 Naming conventions
-- Class names: PascalCase (`ShopServiceImpl`).
+### 7.4 Naming conventions
+- Classes: PascalCase (`UserServiceImpl`).
 - Methods/fields: camelCase (`sendCode`, `userService`).
-- Constants: UPPER_SNAKE_CASE (`RedisConstants`, `SystemConstants`).
-- Service interfaces keep `I` prefix (`IUserService`, `IShopService`).
-- Mapper interfaces end with `Mapper`.
-- Service implementations end with `ServiceImpl`.
+- Constants: UPPER_SNAKE_CASE (`LOGIN_CODE_TTL`).
+- Service interfaces: `I*Service` pattern.
+- Mappers: `*Mapper` suffix.
+- Service implementations: `*ServiceImpl` suffix.
 
-### 6.5 Spring layering rules
-- Controllers handle HTTP orchestration only.
-- Business logic belongs in services.
-- Persistence logic stays in mappers/mapper XML.
-- Shared cross-cutting logic belongs in `config` or `utils`.
-- Keep routes coherent with existing prefixes (for example `/user`, `/shop`).
+### 7.5 Spring layering
+- Controllers: HTTP orchestration, parameter parsing, response shaping.
+- Services: business logic and transactional behavior.
+- Mappers/SQL: persistence and query logic.
+- Utils/config: cross-cutting shared helpers, constants, and setup.
+- Keep endpoint paths aligned with existing route conventions.
 
-### 6.6 Error handling and logging
-- Return business errors via `Result.fail(...)`.
-- Let unexpected runtime exceptions bubble to `WebExceptionAdvice` when appropriate.
-- Use `@Slf4j` and include contextual information in logs.
-- Log stack traces at handling boundaries.
-- Never log secrets (passwords, tokens, connection strings, private keys).
+### 7.6 Error handling and logging
+- Return business validation failures with `Result.fail(...)`.
+- Let unexpected runtime exceptions bubble to `WebExceptionAdvice`.
+- Use `@Slf4j` for operational logs with clear context.
+- Log exceptions at handling boundaries with stack traces.
+- Do not log secrets (passwords, tokens, credentials, private keys).
 
-### 6.7 MyBatis-Plus and persistence
-- Reuse `ServiceImpl<Mapper, Entity>` + `BaseMapper<Entity>` patterns.
-- Put SQL-specific behavior in mapper layer / XML when needed.
-- Reuse configured pagination support in `MybatisConfig`.
-- Keep entity/schema alignment with `src/main/resources/db/hmdp.sql`.
+### 7.7 Persistence and Redis patterns
+- Reuse MyBatis-Plus patterns: `ServiceImpl<Mapper, Entity>` and `BaseMapper<Entity>`.
+- Put SQL-heavy logic in mapper/XML rather than controller/service glue.
+- Reuse existing Redis key conventions from `RedisConstants`.
+- Preserve TTL units and semantics already used in service implementations.
 
-### 6.8 Testing expectations
-- Put tests under `src/test/java` with mirrored package structure.
-- Use class names ending in `Test` or `Tests`.
-- Prefer focused service-level unit tests for new logic.
-- For integration tests, document MySQL/Redis requirements.
-- During development, run single-test command first; run full suite before handoff.
+### 7.8 Testing expectations
+- Place tests under `src/test/java` mirroring package structure.
+- Name tests `*Test` or `*Tests`.
+- Prefer focused service tests for new logic.
+- For integration tests, document MySQL/Redis assumptions in test notes.
+- During development, run the narrowest test first, then broader suites.
 
-## 7) Configuration and secrets
-- `application.yaml` includes local-development credentials; treat as defaults only.
-- Do not commit new secrets or real credentials.
-- Prefer environment overrides for non-local deployments.
+## 8) Configuration and secrets
+- `application.yaml` contains local defaults; treat them as development-only values.
+- Do not commit new secrets, tokens, or real credentials.
+- Prefer environment-specific overrides outside source control.
 
-## 8) Cursor and Copilot rule files
+## 9) Cursor/Copilot instruction files
 Checked paths:
 - `.cursorrules`
 - `.cursor/rules/`
 - `.github/copilot-instructions.md`
 
-Status at time of writing:
-- No Cursor or Copilot rule files were found.
-- If these files are later added, treat them as higher-priority instructions and update this document.
+Current status:
+- No Cursor or Copilot rule files were found in this repository.
+- If any are added later, treat them as higher-priority instructions and update this file.
 
-## 9) Agent workflow checklist
-- Read `pom.xml` and target package files before major edits.
-- Keep changes minimal and aligned with surrounding patterns.
-- Run `mvn -Dtest=... test` for touched logic when possible.
-- Run at least `mvn clean compile` before handoff; prefer `mvn test`.
-- Report commands run and notable outcomes in final handoff.
+## 10) Agent workflow checklist
+- Read `pom.xml` and touched package files before editing.
+- Keep diffs minimal and scoped to the requested change.
+- Do not refactor unrelated files while implementing task work.
+- Prefer single-test execution during iteration; run broader checks before handoff.
+- Report commands executed, outcomes, and any environment blockers.

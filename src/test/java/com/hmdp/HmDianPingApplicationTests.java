@@ -7,6 +7,7 @@ import com.hmdp.entity.Shop;
 import com.hmdp.entity.ShopType;
 import com.hmdp.service.IShopService;
 import com.hmdp.service.IShopTypeService;
+import com.hmdp.utils.RedisIdWorker;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TYPE_KEY;
@@ -31,6 +34,9 @@ class HmDianPingApplicationTests {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private RedisIdWorker redisIdWorker;
 
     private Long usedShopId;
     private Long usedMissingShopId;
@@ -119,6 +125,31 @@ class HmDianPingApplicationTests {
         Assertions.assertTrue(secondList.get(0) instanceof ShopType);
         ShopType cachedType = (ShopType) secondList.get(0);
         Assertions.assertEquals("cache-hit-type", cachedType.getName());
+    }
+
+    @Test
+    void testNextIdUnique() {
+        Set<Long> idSet = new HashSet<>();
+
+        for (int i = 0; i < 100000; i++) {
+            long id = redisIdWorker.nextId("order");
+            //System.out.println(id);
+            idSet.add(id);
+        }
+
+        // 校验是否有重复
+        Assertions.assertEquals(100000, idSet.size());
+    }
+
+    @Test
+    void testIdIncrease() {
+        long prev = redisIdWorker.nextId("order");
+
+        for (int i = 0; i < 1000000; i++) {
+            long current = redisIdWorker.nextId("order");
+            Assertions.assertTrue(current > prev);
+            prev = current;
+        }
     }
 
 }

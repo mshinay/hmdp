@@ -1,6 +1,7 @@
 package com.hmdp.controller;
 
 
+import cn.hutool.core.util.StrUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.service.IFollowService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,7 +34,31 @@ public class FollowController {
     }
 
     @GetMapping("/or/not/{id}")
-    public Result isFollow(@PathVariable("id") Long id) {
-        return followService.isFollow(id);
+    public Result isFollow(@PathVariable("id") String id) {
+        Long followUserId = parseFollowUserId(id);
+        if (followUserId == null) {
+            return Result.fail("目标用户不能为空");
+        }
+        return followService.isFollow(followUserId);
+    }
+
+    @GetMapping("/common/{id}")
+    public Result followCommons(@PathVariable("id") String id) {
+        Long targetUserId = parseFollowUserId(id);
+        if (targetUserId == null) {
+            return Result.fail("目标用户不能为空");
+        }
+        return followService.followCommons(targetUserId);
+    }
+
+    private Long parseFollowUserId(String id) {
+        if (StrUtil.isBlank(id) || "undefined".equalsIgnoreCase(id)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(id);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

@@ -1,10 +1,12 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Follow;
 import com.hmdp.mapper.FollowMapper;
 import com.hmdp.service.IFollowService;
+import com.hmdp.service.IUserService;
 import com.hmdp.utils.UserHolder;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -12,6 +14,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.hmdp.utils.RedisConstants.FOLLOW_KEY;
 
@@ -28,6 +34,9 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private IUserService userService;
 
     @Override
     public Result follow(Long followUserId, Boolean isFollowed) {
@@ -90,5 +99,56 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             return Result.ok(Boolean.TRUE);
         }
         return Result.ok(Boolean.FALSE);
+    }
+
+    @Override
+    public Result followCommons(Long targetUserId) {
+        if (targetUserId == null) {
+            return Result.fail("目标用户不能为空");
+        }
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail("用户未登录");
+        }
+        Long userId = user.getId();
+        if (userId.equals(targetUserId)) {
+            return Result.ok(Collections.emptyList());
+        }
+
+        String key1 = FOLLOW_KEY + userId;
+        String key2 = FOLLOW_KEY + targetUserId;
+        Set<String> commonIds = stringRedisTemplate.opsForSet().intersect(key1, key2);
+        if (commonIds == null || commonIds.isEmpty()) {
+            Boolean hasKey1 = stringRedisTemplate.hasKey(key1);
+            Boolean hasKey2 = stringRedisTemplate.hasKey(key2);
+            if (Boolean.FALSE.equals(hasKey1)) {
+                loadFollowsToRedis(userId, key1);
+            }
+            if (Boolean.FALSE.equals(hasKey2)) {
+                loadFollowsToRedis(targetUserId, key2);
+            }
+            commonIds = stringRedisTemplate.opsForSet().intersect(key1, key2);
+            if (commonIds == null || commonIds.isEmpty()) {
+                return Result.ok(Collections.emptyList());
+            }
+        }
+
+        List<Long> ids = commonIds.stream().map(Long::valueOf).collect(Collectors.toList());
+        List<UserDTO> users = userService.listByIds(ids)
+                .stream()
+                .map(item -> BeanUtil.copyProperties(item, UserDTO.class))
+                .collect(Collectors.toList());
+        return Result.ok(users);
+    }
+
+    private void loadFollowsToRedis(Long userId, String key) {
+        List<Follow> follows = query().eq("user_id", userId).list();
+        if (follows == null || follows.isEmpty()) {
+            return;
+        }
+        String[] ids = follows.stream()
+                .map(follow -> follow.getFollowUserId().toString())
+                .toArray(String[]::new);
+        stringRedisTemplate.opsForSet().add(key, ids);
     }
 }

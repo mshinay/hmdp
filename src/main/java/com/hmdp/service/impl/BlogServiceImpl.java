@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Blog;
+import com.hmdp.entity.Follow;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
 import com.hmdp.service.IBlogService;
+import com.hmdp.service.IFollowService;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.SystemConstants;
 import com.hmdp.utils.UserHolder;
@@ -23,6 +25,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.hmdp.utils.RedisConstants.BLOG_LIKED_KEY;
+import static com.hmdp.utils.RedisConstants.FEED_KEY;
 
 /**
  * <p>
@@ -40,6 +43,33 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private IFollowService followService;
+
+    @Override
+    public Result saveBlog(Blog blog) {
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail("用户未登录");
+        }
+        Long userId = user.getId();
+        blog.setUserId(userId);
+
+        boolean success = save(blog);
+        if (!success) {
+            return Result.fail("发布笔记失败");
+        }
+
+        List<Follow> followers = followService.query().eq("follow_user_id", userId).list();
+        if (followers != null && !followers.isEmpty()) {
+            long now = System.currentTimeMillis();
+            Long blogId = blog.getId();
+            followers.forEach(follow -> stringRedisTemplate.opsForZSet()
+                    .add(FEED_KEY + follow.getUserId(), blogId.toString(), now));
+        }
+        return Result.ok(blog.getId());
+    }
 
     @Override
     public Result likeBlog(Long id) {

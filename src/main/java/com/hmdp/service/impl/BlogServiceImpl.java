@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.ScrollResult;
 import com.hmdp.entity.Blog;
 import com.hmdp.entity.Follow;
 import com.hmdp.entity.User;
@@ -16,10 +17,13 @@ import com.hmdp.utils.UserHolder;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -137,6 +141,74 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
                 .map(user -> BeanUtil.copyProperties(user, UserDTO.class))
                 .collect(Collectors.toList());
         return Result.ok(userDTOS);
+    }
+
+    @Override
+    public Result queryBlogOfFollow(Long max, Integer offset) {
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail("用户未登录");
+        }
+        long maxTime = max == null ? Long.MAX_VALUE : max;
+        int os = offset == null ? 0 : offset;
+        String key = FEED_KEY + user.getId();
+        Set<ZSetOperations.TypedTuple<String>> typedTuples = stringRedisTemplate.opsForZSet()
+                .reverseRangeByScoreWithScores(key, 0, maxTime, os, SystemConstants.DEFAULT_PAGE_SIZE);
+        if (typedTuples == null || typedTuples.isEmpty()) {
+            ScrollResult scrollResult = new ScrollResult();
+            scrollResult.setList(Collections.emptyList());
+            scrollResult.setMinTime(0L);
+            scrollResult.setOffset(0);
+            return Result.ok(scrollResult);
+        }
+
+        List<Long> ids = new ArrayList<>(typedTuples.size());
+        long minTime = 0L;
+        int sameTimeCount = 0;
+        for (ZSetOperations.TypedTuple<String> tuple : typedTuples) {
+            if (tuple == null || tuple.getValue() == null || tuple.getScore() == null) {
+                continue;
+            }
+            ids.add(Long.valueOf(tuple.getValue()));
+            long time = tuple.getScore().longValue();
+            if (time == minTime) {
+                sameTimeCount++;
+            } else {
+                minTime = time;
+                sameTimeCount = 1;
+            }
+        }
+        int newOffset = minTime == maxTime ? os + sameTimeCount : sameTimeCount;
+        if (ids.isEmpty()) {
+            ScrollResult scrollResult = new ScrollResult();
+            scrollResult.setList(Collections.emptyList());
+            scrollResult.setMinTime(minTime);
+            scrollResult.setOffset(newOffset);
+            return Result.ok(scrollResult);
+        }
+
+        String idStr = StrUtil.join(",", ids);
+        List<Blog> blogs = query()
+                .in("id", ids)
+                .last("ORDER BY FIELD(id," + idStr + ")")
+                .list();
+
+        if (blogs.size() < ids.size()) {
+            Set<Long> dbIds = blogs.stream().map(Blog::getId).collect(Collectors.toCollection(HashSet::new));
+            ids.stream().filter(id -> !dbIds.contains(id))
+                    .forEach(id -> stringRedisTemplate.opsForZSet().remove(key, id.toString()));
+        }
+
+        blogs.forEach(blog -> {
+            queryBlogUser(blog);
+            isBlogLiked(blog);
+        });
+
+        ScrollResult scrollResult = new ScrollResult();
+        scrollResult.setList(blogs);
+        scrollResult.setMinTime(minTime);
+        scrollResult.setOffset(newOffset);
+        return Result.ok(scrollResult);
     }
 
     private void queryBlogUser(Blog blog) {

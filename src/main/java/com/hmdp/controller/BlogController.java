@@ -67,6 +67,13 @@ public class BlogController {
         return blogService.queryHotBlog(current);
     }
 
+    @GetMapping("/of/follow")
+    public Result queryBlogOfFollow(
+            @RequestParam(value = "lastId", required = false) Long max,
+            @RequestParam(value = "offset", defaultValue = "0") Integer offset) {
+        return blogService.queryBlogOfFollow(max, offset);
+    }
+
     // BlogController  根据id查询博主的探店笔记
     @GetMapping("/of/user")
     public Result queryBlogByUserId(

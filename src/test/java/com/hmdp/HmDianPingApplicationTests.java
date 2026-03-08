@@ -13,15 +13,21 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.geo.Point;
+import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TYPE_KEY;
+import static com.hmdp.utils.RedisConstants.SHOP_GEO_KEY;
 
 @SpringBootTest
 class HmDianPingApplicationTests {
@@ -150,6 +156,28 @@ class HmDianPingApplicationTests {
             Assertions.assertTrue(current > prev);
             prev = current;
         }
+    }
+
+    @Test
+    void loadShopDataToRedis() {
+        List<Shop> shops = shopService.list();
+        Assertions.assertNotNull(shops);
+
+        Map<Long, List<RedisGeoCommands.GeoLocation<String>>> typeMap = new HashMap<>();
+        for (Shop shop : shops) {
+            if (shop.getTypeId() == null || shop.getX() == null || shop.getY() == null || shop.getId() == null) {
+                continue;
+            }
+            typeMap.computeIfAbsent(shop.getTypeId(), k -> new ArrayList<>())
+                    .add(new RedisGeoCommands.GeoLocation<>(
+                            shop.getId().toString(),
+                            new Point(shop.getX(), shop.getY())
+                    ));
+        }
+
+        typeMap.forEach((typeId, locations) ->
+                stringRedisTemplate.opsForGeo().add(SHOP_GEO_KEY + typeId, locations)
+        );
     }
 
 }
